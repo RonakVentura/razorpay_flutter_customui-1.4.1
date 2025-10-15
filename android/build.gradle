@@ -1,0 +1,43 @@
+group 'com.razorpay.flutter_customui'
+version '1.0'
+
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.3.0'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 33
+    namespace 'com.razorpay.flutter_customui'
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+    }
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+    dependencies {
+        implementation fileTree(include: ['*.jar'], dir: 'libs')
+        implementation fileTree(dir: 'libs', include: ['*.aar'])
+        implementation 'com.razorpay:customui:3.9.+'
+        implementation 'com.google.code.gson:gson:2.8.7'
+        implementation "androidx.core:core:1.9.0"
+    }
+}
+
+
