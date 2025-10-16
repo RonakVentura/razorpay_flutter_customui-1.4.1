@@ -18,6 +18,16 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.util.Log;
 
+// For edge-to-edge compatibility
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.graphics.Insets;
+
+// For new back gesture API (Android 13+)
+import android.window.OnBackInvokedDispatcher;
+
 public class RazorpayPaymentActivity extends Activity implements PaymentResultWithDataListener {
     private Razorpay razorpay;
     private WebView webview;
@@ -33,12 +43,37 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // --- Edge-to-edge configuration ---
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat controller =
+                new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(true);
+
+        // Apply system bar insets dynamically to avoid WebView clipping
+        View rootView = getWindow().getDecorView().findViewById(android.R.id.content);
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, (v, insets) -> {
+            Insets systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                v.setPadding(systemBarsInsets.left, systemBarsInsets.top,
+             systemBarsInsets.right, systemBarsInsets.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+
+        // --- Setup Razorpay payload ---
         Bundle extras = this.getIntent().getExtras();
         String optionsString = extras.getString(Constants.OPTIONS);
         try{
             payload = new JSONObject(optionsString);
         } catch(Exception e){}
 
+        // --- Handle back gestures on Android 13+ (API 33+) ---
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                this::showBackAlert
+            );
+        }
+
+        // Initialize Razorpay and WebView
         initRazorpay();
         createWebView();
         sendRequest();
@@ -66,14 +101,16 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
     }
 
     private void createWebView() {
-
-        /**
-         * Creating webview and adding it to rootview
-         */
+        // Creating WebView programmatically
         ViewGroup rootview = (ViewGroup) this.findViewById(android.R.id.content);
         webview = new WebView(this);
         webview.setScrollContainer(false);
-        RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.FILL_PARENT, RelativeLayout.LayoutParams.FILL_PARENT);
+        webview.setFocusableInTouchMode(true);
+        webview.requestFocus();
+
+        RelativeLayout.LayoutParams params =
+                new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT,
+                        RelativeLayout.LayoutParams.MATCH_PARENT);
         webview.setLayoutParams(params);
         rootview.addView(webview);
         razorpay.setWebView(webview);
@@ -90,22 +127,24 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
 
     @Override
     public void onBackPressed() {
-            new AlertDialog.Builder(this)
+        // For backward compatibility on Android < 13
+        showBackAlert();
+    }
+
+    private void showBackAlert() {
+        new AlertDialog.Builder(this)
             .setMessage(Constants.BACK_ALERT_MESSAGE)
-            .setPositiveButton("No", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface arg0, int arg1) {
-                }
-            })
-            .setNegativeButton("Yes", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface arg0, int arg1) {
+            .setPositiveButton("No", (dialog, which) -> dialog.dismiss())
+            .setNegativeButton("Yes", (dialog, which) -> {
+                if (razorpay != null) {
                     razorpay.onBackPressed();
-                    returnErrorCallback(RZP_USER_BACK_PRESSED_ERROR_CODE, "User pressed back button", new PaymentData());
                 }
+                returnErrorCallback(RZP_USER_BACK_PRESSED_ERROR_CODE,
+                        "User pressed back button", new PaymentData());
             })
             .show();
     }
 
-    /* callback for permission requested from android */
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (razorpay != null) {
@@ -149,5 +188,4 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
         this.setResult(RZP_RESULT_CODE, returnIntent);
         this.finish();
     }
-
 }
